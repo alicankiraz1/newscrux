@@ -89,7 +89,14 @@ async function pollAndNotify(): Promise<void> {
     }
 
     const relevancePassedIds = new Set<string>();
-    const discovered = getEntriesByState('discovered');
+    // Limit discovered batch to prevent overwhelming the relevance model
+    const MAX_RELEVANCE_BATCH = 25;
+    const allDiscovered = getEntriesByState('discovered');
+    const discovered = allDiscovered.slice(0, MAX_RELEVANCE_BATCH);
+
+    if (allDiscovered.length > MAX_RELEVANCE_BATCH) {
+      log.info(`Processing ${discovered.length}/${allDiscovered.length} discovered articles this cycle`);
+    }
 
     if (discovered.length > 0) {
       const result = await filterByRelevance(discovered);
@@ -106,7 +113,10 @@ async function pollAndNotify(): Promise<void> {
       for (const entry of result.bypassed) relevancePassedIds.add(entry.id);
 
       if (result.parseError) {
-        log.warn('Relevance parse error — skipping enrichment for affected entries this cycle');
+        log.warn('Relevance parse error — allowing all entries through this cycle');
+        for (const entry of discovered) {
+          relevancePassedIds.add(entry.id);
+        }
       }
 
       saveArticleQueue();
