@@ -10,6 +10,8 @@ export const config = {
   llmModel: process.env.LLM_MODEL || process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v3.2-speciale',
   pushoverUserKey: process.env.PUSHOVER_USER_KEY || '',
   pushoverAppToken: process.env.PUSHOVER_APP_TOKEN || '',
+  gotifyUrl: process.env.GOTIFY_URL || '',
+  gotifyToken: process.env.GOTIFY_TOKEN || '',
   pollIntervalMinutes: parseInt(process.env.POLL_INTERVAL_MINUTES || '15', 10),
   maxArticlesPerPoll: parseInt(process.env.MAX_ARTICLES_PER_POLL || '10', 10),
   logLevel: (process.env.LOG_LEVEL || 'info') as 'debug' | 'info' | 'warn' | 'error',
