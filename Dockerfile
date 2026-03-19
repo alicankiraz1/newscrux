@@ -14,13 +14,14 @@ RUN npm run build
 FROM --platform=linux/amd64 node:22-slim AS runtime
 WORKDIR /app
 
-RUN mkdir -p /app/data && chown node:node /app/data
+RUN apt-get update && apt-get install -y --no-install-recommends gosu && rm -rf /var/lib/apt/lists/*
+RUN mkdir -p /app/data
 
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev && npm cache clean --force
 COPY --from=build /app/dist/ dist/
+COPY entrypoint.sh /entrypoint.sh
+RUN chmod +x /entrypoint.sh
 
-USER node
-
-ENTRYPOINT ["node", "dist/index.js"]
+ENTRYPOINT ["/entrypoint.sh"]
 CMD ["--lang=en"]
