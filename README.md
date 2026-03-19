@@ -171,8 +171,10 @@ newscrux                # Start with English summaries (default)
 | `LLM_API_KEY` | Yes | — | API key for your LLM provider (`OPENROUTER_API_KEY` also accepted) |
 | `LLM_BASE_URL` | No | `https://openrouter.ai/api/v1` | Base URL of any OpenAI-compatible API |
 | `LLM_MODEL` | No | `deepseek/deepseek-v3.2-speciale` | Model name (`OPENROUTER_MODEL` also accepted) |
-| `PUSHOVER_USER_KEY` | Yes | — | Pushover user key |
-| `PUSHOVER_APP_TOKEN` | Yes | — | Pushover app token |
+| `PUSHOVER_USER_KEY` | One backend required | — | Pushover user key *(Pushover backend)* |
+| `PUSHOVER_APP_TOKEN` | One backend required | — | Pushover app token *(Pushover backend)* |
+| `GOTIFY_URL` | One backend required | — | Gotify server URL e.g. `http://host:80` *(Gotify backend)* |
+| `GOTIFY_TOKEN` | One backend required | — | Gotify app token *(Gotify backend)* |
 | `POLL_INTERVAL_MINUTES` | No | `15` | Minutes between feed polls |
 | `MAX_ARTICLES_PER_POLL` | No | `10` | Max regular articles processed per cycle |
 | `ARXIV_MAX_PER_POLL` | No | `15` | Max arXiv papers processed per cycle |
