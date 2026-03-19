@@ -28,10 +28,11 @@ Options:
   -v, --version       Show version number
 
 Environment variables (.env):
-  OPENROUTER_API_KEY    OpenRouter API key (required)
+  LLM_API_KEY           LLM API key (required; OPENROUTER_API_KEY also accepted)
+  LLM_BASE_URL          API base URL (default: https://openrouter.ai/api/v1)
+  LLM_MODEL             Model name (default: deepseek/deepseek-v3.2-speciale)
   PUSHOVER_USER_KEY     Pushover user key (required)
   PUSHOVER_APP_TOKEN    Pushover app token (required)
-  OPENROUTER_MODEL      AI model (default: deepseek/deepseek-v3.2-speciale)
   POLL_INTERVAL_MINUTES Poll interval in minutes (default: 15)
 
 Examples:

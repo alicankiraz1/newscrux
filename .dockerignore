@@ -1,0 +1,13 @@
+.git
+node_modules
+dist
+data
+.env
+.env.example
+*.tmp
+*.md
+LICENSE
+newscrux.service
+CLAUDE.md
+.dockerignore
+.gitignore

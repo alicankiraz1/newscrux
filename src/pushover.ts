@@ -145,3 +145,32 @@ export async function sendArticleNotification(
   const success = await sendNotification(title, message, entry.link, urlTitle);
   return { success, truncated };
 }
+
+export async function sendArxivDigest(entries: QueueEntry[]): Promise<boolean> {
+  const { labels } = getLanguagePack(runtimeConfig.language);
+
+  const digestParts: string[] = [];
+  for (const entry of entries) {
+    const s = entry.structuredSummary!;
+    const title = s.translated_title || (s as any).title_tr || entry.title;
+    digestParts.push(`<b>${escapeHtml(title)}</b>\n${escapeHtml(s.what_happened)}`);
+  }
+
+  // Pushover 1024 char limit — fit as many papers as possible
+  let digestMessage = '';
+  let includedCount = 0;
+  for (const part of digestParts) {
+    const candidate = digestMessage ? digestMessage + '\n\n' + part : part;
+    if (candidate.length > 1000) break;
+    digestMessage = candidate;
+    includedCount++;
+  }
+
+  const digestTitle = `📄 arXiv Digest (${includedCount} ${includedCount === 1 ? 'paper' : 'papers'})`;
+  const success = await sendNotification(digestTitle, digestMessage, 'https://arxiv.org', labels.readMore);
+
+  if (success) {
+    log.info(`arXiv digest sent: ${includedCount} papers in message, ${entries.length} total marked sent`);
+  }
+  return success;
+}

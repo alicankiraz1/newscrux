@@ -33,7 +33,7 @@
     "dev": "tsx src/index.ts"
   },
   "dependencies": {
-    "@openrouter/sdk": "^0.1.0",
+    "openai": "^4.78.0",
     "cheerio": "^1.2.0",
     "dotenv": "^16.4.0",
     "rss-parser": "^3.13.0"

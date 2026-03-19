@@ -1,15 +1,11 @@
 // src/summarizer.ts
-import { OpenRouter } from '@openrouter/sdk';
 import { config, runtimeConfig } from './config.js';
+import { llm } from './llm.js';
 import { createLogger } from './logger.js';
 import { getLanguagePack } from './i18n.js';
 import type { QueueEntry, StructuredSummary, FeedKind } from './types.js';
 
 const log = createLogger('summarizer');
-
-const openrouter = new OpenRouter({
-  apiKey: config.openrouterApiKey,
-});
 
 const KIND_TO_SOURCE_TYPE: Record<FeedKind, StructuredSummary['source_type']> = {
   official_blog: 'official_announcement',
@@ -25,15 +21,7 @@ async function delay(ms: number): Promise<void> {
 }
 
 function extractResponseText(result: any): string {
-  const rawContent = result.choices?.[0]?.message?.content;
-  if (typeof rawContent === 'string') return rawContent;
-  if (Array.isArray(rawContent)) {
-    return rawContent
-      .filter((item: any): item is { type: 'text'; text: string } => item.type === 'text')
-      .map((item: any) => item.text)
-      .join('');
-  }
-  return '';
+  return result.choices?.[0]?.message?.content ?? '';
 }
 
 function parseAndValidateSummary(text: string, feedKind: FeedKind): StructuredSummary | null {
@@ -96,8 +84,8 @@ export async function summarizeEntry(entry: QueueEntry): Promise<StructuredSumma
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const result = await openrouter.chat.send({
-        model: config.openrouterModel,
+      const result = await llm.chat.completions.create({
+        model: config.llmModel,
         messages: [
           { role: 'system', content: systemPrompt },
           { role: 'user', content: userContent },

@@ -19,7 +19,7 @@ import {
   removeEntry,
   countByState,
 } from './queue.js';
-import { sendNotification, sendArticleNotification, escapeHtml } from './pushover.js';
+import { sendNotification, sendArticleNotification, sendArxivDigest } from './notifier.js';
 import { parseArgs } from './cli.js';
 import { getLanguagePack } from './i18n.js';
 import type { PollMetrics } from './types.js';
@@ -27,12 +27,28 @@ import type { PollMetrics } from './types.js';
 const log = createLogger('main');
 
 function validateConfig(): void {
-  if (!config.openrouterApiKey) {
-    log.error('OPENROUTER_API_KEY is required. Set it in .env file.');
+  if (!config.llmApiKey) {
+    log.error('LLM_API_KEY (or OPENROUTER_API_KEY) is required. Set it in .env file.');
     process.exit(1);
   }
-  if (!config.pushoverUserKey || !config.pushoverAppToken) {
-    log.error('PUSHOVER_USER_KEY and PUSHOVER_APP_TOKEN are required. Set them in .env file.');
+
+  const hasPushover = !!(config.pushoverUserKey && config.pushoverAppToken);
+  const hasGotify = !!(config.gotifyUrl && config.gotifyToken);
+
+  if (hasPushover && hasGotify) {
+    log.error(
+      'Both Pushover and Gotify credentials are set — choose one. ' +
+      'Set either PUSHOVER_USER_KEY+PUSHOVER_APP_TOKEN or GOTIFY_URL+GOTIFY_TOKEN, not both.',
+    );
+    process.exit(1);
+  }
+
+  if (!hasPushover && !hasGotify) {
+    log.error(
+      'No notification backend configured. ' +
+      'Set PUSHOVER_USER_KEY+PUSHOVER_APP_TOKEN (Pushover) ' +
+      'or GOTIFY_URL+GOTIFY_TOKEN (Gotify).',
+    );
     process.exit(1);
   }
 }
@@ -180,7 +196,7 @@ async function pollAndNotify(): Promise<void> {
         metrics.sent++;
         if (truncated) metrics.truncated++;
       } else {
-        markFailed(entry.id, 'Pushover send failed');
+        markFailed(entry.id, 'Notification send failed');
         metrics.send_failed++;
       }
 
@@ -191,37 +207,14 @@ async function pollAndNotify(): Promise<void> {
     const now = Date.now();
     const arxivReady = arxivToSend.filter(e => e.structuredSummary);
     if (arxivReady.length > 0 && (now - lastArxivDigestTime) >= ARXIV_DIGEST_INTERVAL_MS) {
-      const { labels } = getLanguagePack(runtimeConfig.language);
-
-      // Build digest message: each paper gets a compact entry
-      const digestParts: string[] = [];
-      for (const entry of arxivReady) {
-        const s = entry.structuredSummary!;
-        const title = s.translated_title || (s as any).title_tr || entry.title;
-        digestParts.push(`<b>${escapeHtml(title)}</b>\n${escapeHtml(s.what_happened)}`);
-      }
-
-      // Pushover 1024 char limit — fit as many papers as possible
-      let digestMessage = '';
-      let includedCount = 0;
-      for (const part of digestParts) {
-        const candidate = digestMessage ? digestMessage + '\n\n' + part : part;
-        if (candidate.length > 1000) break; // leave room for header
-        digestMessage = candidate;
-        includedCount++;
-      }
-
-      const digestTitle = `📄 arXiv Digest (${includedCount} ${includedCount === 1 ? 'paper' : 'papers'})`;
-      const success = await sendNotification(digestTitle, digestMessage, 'https://arxiv.org', labels.readMore);
-
+      const success = await sendArxivDigest(arxivReady);
       if (success) {
-        // Mark all arxiv papers as sent (even those that didn't fit in message)
         for (const entry of arxivReady) {
           transitionEntry(entry.id, 'sent');
           metrics.sent++;
         }
         lastArxivDigestTime = now;
-        log.info(`arXiv digest sent: ${includedCount} papers in message, ${arxivReady.length} total marked sent`);
+        log.info(`arXiv digest sent: ${arxivReady.length} papers`);
       } else {
         for (const entry of arxivReady) {
           markFailed(entry.id, 'arXiv digest send failed');
@@ -283,7 +276,7 @@ async function main(): Promise<void> {
   if (startupSent) {
     log.info('Startup notification sent');
   } else {
-    log.error('Failed to send startup notification — check Pushover credentials');
+    log.error('Failed to send startup notification — check notification credentials');
   }
 
   await pollAndNotify();
