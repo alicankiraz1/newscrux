@@ -1,0 +1,16 @@
+services:
+  newscrux:
+    build: .
+    container_name: newscrux
+    restart: on-failure:5
+    command: ["--lang=en"]
+    env_file:
+      - path: .env
+        required: false
+    volumes:
+      - ./data:/app/data
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"

@@ -1,14 +1,10 @@
 // src/relevance.ts
-import { OpenRouter } from '@openrouter/sdk';
 import { config } from './config.js';
+import { llm } from './llm.js';
 import { createLogger } from './logger.js';
 import type { QueueEntry } from './types.js';
 
 const log = createLogger('relevance');
-
-const openrouter = new OpenRouter({
-  apiKey: config.openrouterApiKey,
-});
 
 const RELEVANCE_PROMPT = `Sen bir AI/ML haber filtresisin.
 Sana makale başlıkları ve açıklamaları verilecek.
@@ -60,26 +56,15 @@ export async function filterByRelevance(entries: QueueEntry[]): Promise<Relevanc
 
   for (let attempt = 0; attempt <= MAX_RETRIES; attempt++) {
     try {
-      const result = await openrouter.chat.send({
-        model: config.openrouterModel,
+      const result = await llm.chat.completions.create({
+        model: config.llmModel,
         messages: [
           { role: 'system', content: RELEVANCE_PROMPT },
           { role: 'user', content: list },
         ],
       });
 
-      const rawContent = result.choices?.[0]?.message?.content;
-      let text: string;
-      if (typeof rawContent === 'string') {
-        text = rawContent;
-      } else if (Array.isArray(rawContent)) {
-        text = rawContent
-          .filter((item): item is { type: 'text'; text: string } => item.type === 'text')
-          .map(item => item.text)
-          .join('');
-      } else {
-        text = '';
-      }
+      const text = result.choices?.[0]?.message?.content ?? '';
 
       const jsonMatch = text.match(/\[[\s\S]*\]/);
       if (!jsonMatch) {
