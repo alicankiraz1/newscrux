@@ -7,8 +7,8 @@ import type { SupportedLanguage } from './i18n.js';
 export const config = {
   openrouterApiKey: process.env.OPENROUTER_API_KEY || '',
   openrouterModel: process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v3.2-speciale',
-  pushoverUserKey: process.env.PUSHOVER_USER_KEY || '',
-  pushoverAppToken: process.env.PUSHOVER_APP_TOKEN || '',
+  telegramBotToken: process.env.TELEGRAM_BOT_TOKEN || '',
+  telegramChatId: process.env.TELEGRAM_CHAT_ID || '',
   pollIntervalMinutes: parseInt(process.env.POLL_INTERVAL_MINUTES || '15', 10),
   maxArticlesPerPoll: parseInt(process.env.MAX_ARTICLES_PER_POLL || '10', 10),
   logLevel: (process.env.LOG_LEVEL || 'info') as 'debug' | 'info' | 'warn' | 'error',
@@ -56,3 +56,10 @@ export const config = {
 export const runtimeConfig: { language: SupportedLanguage } = {
   language: 'en',
 };
+
+export function getMissingConfigKeys(
+  env: Record<string, string | undefined> = process.env,
+): string[] {
+  const requiredKeys = ['OPENROUTER_API_KEY', 'TELEGRAM_BOT_TOKEN', 'TELEGRAM_CHAT_ID'];
+  return requiredKeys.filter(key => !env[key]);
+}

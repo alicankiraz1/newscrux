@@ -1,12 +1,9 @@
-// src/pushover.ts
 import { config, runtimeConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { getLanguagePack } from './i18n.js';
 import type { QueueEntry, StructuredSummary } from './types.js';
 
-const log = createLogger('pushover');
-
-// --- HTML Escaping ---
+const log = createLogger('telegram');
 
 export function escapeHtml(text: string): string {
   return text
@@ -16,8 +13,6 @@ export function escapeHtml(text: string): string {
     .replace(/"/g, '&quot;')
     .replace(/'/g, '&#039;');
 }
-
-// --- Smart Truncation ---
 
 function trimToSentenceBoundary(text: string, maxLength: number): string {
   if (text.length <= maxLength) return text;
@@ -40,8 +35,6 @@ function trimToSentenceBoundary(text: string, maxLength: number): string {
   return lastSpace > 0 ? truncated.slice(0, lastSpace) + '...' : truncated;
 }
 
-// --- Notification Rendering ---
-
 interface RenderResult {
   title: string;
   message: string;
@@ -53,8 +46,6 @@ export function renderNotification(entry: QueueEntry, summary: StructuredSummary
   const emoji = isArxiv ? '📄' : '📰';
   const { labels } = getLanguagePack(runtimeConfig.language);
 
-  // Support both translated_title and legacy title_tr
-  // Title is NOT HTML-escaped — Pushover does not parse HTML in titles
   const titleRaw = summary.translated_title || (summary as any).title_tr || entry.title;
   const title = titleRaw.slice(0, 250);
 
@@ -62,39 +53,40 @@ export function renderNotification(entry: QueueEntry, summary: StructuredSummary
   const whatHappened = escapeHtml(summary.what_happened);
   const whyItMatters = escapeHtml(summary.why_it_matters);
   const keyDetail = escapeHtml(summary.key_detail);
+  const articleLink = escapeHtml(entry.link);
 
   const sourceLine = `${emoji} ${source}`;
   const whatLine = `\n\n<b>${labels.whatHappened}</b> ${whatHappened}`;
   const whyLine = `\n\n<b>${labels.whyItMatters}</b> ${whyItMatters}`;
   const detailLine = `\n\n💡 ${keyDetail}`;
+  const linkLine = `\n\n<b>${labels.readArticle}:</b> ${articleLink}`;
 
-  const MAX_MESSAGE = 1024;
+  const MAX_MESSAGE = 3500;
 
-  let message = sourceLine + whatLine + whyLine + detailLine;
+  let message = sourceLine + whatLine + whyLine + detailLine + linkLine;
   if (message.length <= MAX_MESSAGE) {
     return { title, message, truncated: false };
   }
 
-  message = sourceLine + whatLine + whyLine;
-  if (message.length <= MAX_MESSAGE) {
-    return { title, message, truncated: true };
+  message = sourceLine + whatLine + whyLine + detailLine;
+  if (message.length <= MAX_MESSAGE - linkLine.length) {
+    return { title, message: message + linkLine, truncated: true };
   }
 
-  const whyFirstSentence = whyItMatters.split(/[.!?]\s/)[0] + '.';
-  const whyLineShort = `\n\n<b>${labels.whyItMatters}</b> ${whyFirstSentence}`;
-  message = sourceLine + whatLine + whyLineShort;
-  if (message.length <= MAX_MESSAGE) {
-    return { title, message, truncated: true };
-  }
-
-  const availableForWhat = MAX_MESSAGE - (sourceLine + `\n\n<b>${labels.whatHappened}</b> ` + whyLineShort).length;
-  const whatTrimmed = trimToSentenceBoundary(whatHappened, Math.max(availableForWhat, 100));
-  message = sourceLine + `\n\n<b>${labels.whatHappened}</b> ${whatTrimmed}` + whyLineShort;
+  const availableForWhat = MAX_MESSAGE - (sourceLine + whyLine + detailLine + linkLine + '\n\n<b></b> ').length - labels.whatHappened.length;
+  const whatTrimmed = trimToSentenceBoundary(whatHappened, Math.max(availableForWhat, 200));
+  message = sourceLine + `\n\n<b>${labels.whatHappened}</b> ${whatTrimmed}` + whyLine + detailLine + linkLine;
 
   return { title, message: message.slice(0, MAX_MESSAGE), truncated: true };
 }
 
-// --- Pushover API ---
+function appendOptionalLink(message: string, url?: string, urlTitle?: string): string {
+  if (!url) return message;
+
+  const label = urlTitle ? escapeHtml(urlTitle) : 'Link';
+  const escapedUrl = escapeHtml(url);
+  return `${message}\n\n<b>${label}:</b> ${escapedUrl}`;
+}
 
 export async function sendNotification(
   title: string,
@@ -103,32 +95,28 @@ export async function sendNotification(
   urlTitle?: string,
 ): Promise<boolean> {
   try {
-    const params: Record<string, string> = {
-      token: config.pushoverAppToken,
-      user: config.pushoverUserKey,
-      title: title.slice(0, 250),
-      message: message.slice(0, 1024),
-      html: '1',
-    };
+    const text = [`<b>${escapeHtml(title.slice(0, 250))}</b>`, appendOptionalLink(message, url, urlTitle)].join('\n\n');
 
-    if (url) params.url = url;
-    if (urlTitle) params.url_title = urlTitle;
-
-    const response = await fetch('https://api.pushover.net/1/messages.json', {
+    const response = await fetch(`https://api.telegram.org/bot${config.telegramBotToken}/sendMessage`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: new URLSearchParams(params),
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        chat_id: config.telegramChatId,
+        text: text.slice(0, 4096),
+        parse_mode: 'HTML',
+        disable_web_page_preview: true,
+      }),
     });
 
     if (!response.ok) {
       const body = await response.text();
-      log.error(`Pushover error (${response.status}): ${body}`);
+      log.error(`Telegram error (${response.status}): ${body}`);
       return false;
     }
 
     return true;
   } catch (err) {
-    log.error('Failed to send Pushover notification', err);
+    log.error('Failed to send Telegram notification', err);
     return false;
   }
 }
@@ -138,10 +126,6 @@ export async function sendArticleNotification(
   summary: StructuredSummary,
 ): Promise<{ success: boolean; truncated: boolean }> {
   const { title, message, truncated } = renderNotification(entry, summary);
-  const isArxiv = entry.feedName.startsWith(config.arxivFeedPrefix);
-  const { labels } = getLanguagePack(runtimeConfig.language);
-  const urlTitle = isArxiv ? labels.readArticle : labels.readMore;
-
-  const success = await sendNotification(title, message, entry.link, urlTitle);
+  const success = await sendNotification(title, message);
   return { success, truncated };
 }

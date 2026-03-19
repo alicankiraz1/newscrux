@@ -29,14 +29,15 @@ Options:
 
 Environment variables (.env):
   OPENROUTER_API_KEY    OpenRouter API key (required)
-  PUSHOVER_USER_KEY     Pushover user key (required)
-  PUSHOVER_APP_TOKEN    Pushover app token (required)
+  TELEGRAM_BOT_TOKEN    Telegram bot token (required)
+  TELEGRAM_CHAT_ID      Telegram target chat ID (required)
   OPENROUTER_MODEL      AI model (default: deepseek/deepseek-v3.2-speciale)
   POLL_INTERVAL_MINUTES Poll interval in minutes (default: 15)
 
 Examples:
   newscrux --lang=tr    Start with Turkish summaries
   newscrux -l de        Start with German summaries
+  newscrux --lang=uz    Start with Uzbek summaries
   newscrux              Start with English summaries (default)`);
 }
 

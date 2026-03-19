@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // src/index.ts
-import { config, runtimeConfig } from './config.js';
+import { config, getMissingConfigKeys, runtimeConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { fetchAllArticles } from './feeds.js';
 import { filterByRelevance } from './relevance.js';
@@ -19,7 +19,8 @@ import {
   removeEntry,
   countByState,
 } from './queue.js';
-import { sendNotification, sendArticleNotification, escapeHtml } from './pushover.js';
+import { sendNotification, sendArticleNotification, escapeHtml } from './telegram.js';
+import { sendImmediatelyIfRegular } from './delivery.js';
 import { parseArgs } from './cli.js';
 import { getLanguagePack } from './i18n.js';
 import type { PollMetrics } from './types.js';
@@ -27,12 +28,9 @@ import type { PollMetrics } from './types.js';
 const log = createLogger('main');
 
 function validateConfig(): void {
-  if (!config.openrouterApiKey) {
-    log.error('OPENROUTER_API_KEY is required. Set it in .env file.');
-    process.exit(1);
-  }
-  if (!config.pushoverUserKey || !config.pushoverAppToken) {
-    log.error('PUSHOVER_USER_KEY and PUSHOVER_APP_TOKEN are required. Set them in .env file.');
+  const missingKeys = getMissingConfigKeys();
+  if (missingKeys.length > 0) {
+    log.error(`${missingKeys.join(', ')} ${missingKeys.length === 1 ? 'is' : 'are'} required. Set ${missingKeys.length === 1 ? 'it' : 'them'} in .env file.`);
     process.exit(1);
   }
 }
@@ -151,8 +149,29 @@ async function pollAndNotify(): Promise<void> {
     for (const entry of toSummarize) {
       const summary = await summarizeEntry(entry);
       if (summary) {
-        transitionEntry(entry.id, 'summarized', { structuredSummary: summary });
-        metrics.summarized++;
+        const immediateDelivery = await sendImmediatelyIfRegular(
+          entry,
+          summary,
+          sendArticleNotification,
+          config.arxivFeedPrefix,
+        );
+
+        if (immediateDelivery.attempted) {
+          if (immediateDelivery.success) {
+            transitionEntry(entry.id, 'sent', { structuredSummary: summary });
+            metrics.summarized++;
+            metrics.sent++;
+            if (immediateDelivery.truncated) metrics.truncated++;
+          } else {
+            transitionEntry(entry.id, 'summarized', { structuredSummary: summary });
+            markFailed(entry.id, 'Telegram send failed');
+            metrics.summarized++;
+            metrics.send_failed++;
+          }
+        } else {
+          transitionEntry(entry.id, 'summarized', { structuredSummary: summary });
+          metrics.summarized++;
+        }
       } else {
         markFailed(entry.id, 'Summarization failed');
         metrics.summary_failed++;
@@ -180,7 +199,7 @@ async function pollAndNotify(): Promise<void> {
         metrics.sent++;
         if (truncated) metrics.truncated++;
       } else {
-        markFailed(entry.id, 'Pushover send failed');
+        markFailed(entry.id, 'Telegram send failed');
         metrics.send_failed++;
       }
 
@@ -201,12 +220,12 @@ async function pollAndNotify(): Promise<void> {
         digestParts.push(`<b>${escapeHtml(title)}</b>\n${escapeHtml(s.what_happened)}`);
       }
 
-      // Pushover 1024 char limit — fit as many papers as possible
+      // Keep digest compact enough for Telegram readability
       let digestMessage = '';
       let includedCount = 0;
       for (const part of digestParts) {
         const candidate = digestMessage ? digestMessage + '\n\n' + part : part;
-        if (candidate.length > 1000) break; // leave room for header
+        if (candidate.length > 3500) break;
         digestMessage = candidate;
         includedCount++;
       }
@@ -283,7 +302,7 @@ async function main(): Promise<void> {
   if (startupSent) {
     log.info('Startup notification sent');
   } else {
-    log.error('Failed to send startup notification — check Pushover credentials');
+    log.error('Failed to send startup notification — check Telegram credentials');
   }
 
   await pollAndNotify();

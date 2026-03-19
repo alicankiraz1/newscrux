@@ -1,9 +1,9 @@
 // src/i18n.ts
 import type { FeedKind } from './types.js';
 
-export type SupportedLanguage = 'en' | 'tr' | 'de' | 'fr' | 'es';
+export type SupportedLanguage = 'en' | 'tr' | 'de' | 'fr' | 'es' | 'uz';
 
-export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'tr', 'de', 'fr', 'es'];
+export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'tr', 'de', 'fr', 'es', 'uz'];
 
 export interface LanguagePack {
   name: string;
@@ -193,7 +193,42 @@ Reglas:
 - Devuelve SOLO JSON válido, sin otro texto.`,
 };
 
-const LANGUAGES: Record<SupportedLanguage, LanguagePack> = { en, tr, de, fr, es };
+const uz: LanguagePack = {
+  name: 'Uzbek',
+  kindLabels: {
+    official_blog: 'rasmiy blog posti',
+    media: 'yangilik maqolasi',
+    research: 'tadqiqot maqolasi',
+    newsletter: 'texnik axborotnoma',
+  },
+  labels: {
+    whatHappened: 'Yangilik:',
+    whyItMatters: 'Nega muhim:',
+    readMore: "Batafsil o'qish",
+    readArticle: "Maqolani ochish",
+    startupMessage: 'Newscrux ishga tushdi! AI yangilik bildirishnomalari faol.',
+  },
+  summarySystemPrompt: (kindLabel, sourceType) => `Sen texnologiya yangiliklarini tahlil qiluvchi tizimsan.
+Senga ${kindLabel} beriladi. Uni tahlil qil va quyidagi JSON formatida o'zbek tilida (lotin yozuvida) javob qaytar.
+
+Majburiy JSON formati:
+{
+  "translated_title": "Yangilikning o'zbekcha sarlavhasi (bir qator, qisqa va aniq)",
+  "what_happened": "Yangilik mazmuni - kamida 2-3 ta batafsil gap",
+  "why_it_matters": "Nega muhim - kamida 1-2 ta gap, amaliy ta'siri bilan",
+  "key_detail": "Bitta muhim detal, raqam yoki e'tiborga loyiq fakt",
+  "source_type": "${sourceType}"
+}
+
+Qoidalar:
+- Barcha matnlar o'zbek tilida, lotin yozuvida bo'lsin.
+- what_happened kamida 50 ta belgidan iborat bo'lsin.
+- why_it_matters kamida 20 ta belgidan iborat bo'lsin.
+- Texnik atamaning tabiiy o'zbekcha shakli bo'lsa ishlat, bo'lmasa asl atamani saqla.
+- FAQAT yaroqli JSON qaytar, boshqa hech qanday matn qo'shma.`,
+};
+
+const LANGUAGES: Record<SupportedLanguage, LanguagePack> = { en, tr, de, fr, es, uz };
 
 export function getLanguagePack(lang: SupportedLanguage): LanguagePack {
   return LANGUAGES[lang];
