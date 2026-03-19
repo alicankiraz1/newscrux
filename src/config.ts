@@ -5,8 +5,9 @@ import type { FeedConfig } from './types.js';
 import type { SupportedLanguage } from './i18n.js';
 
 export const config = {
-  openrouterApiKey: process.env.OPENROUTER_API_KEY || '',
-  openrouterModel: process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v3.2-speciale',
+  llmApiKey: process.env.LLM_API_KEY || process.env.OPENROUTER_API_KEY || '',
+  llmBaseUrl: process.env.LLM_BASE_URL || 'https://openrouter.ai/api/v1',
+  llmModel: process.env.LLM_MODEL || process.env.OPENROUTER_MODEL || 'deepseek/deepseek-v3.2-speciale',
   pushoverUserKey: process.env.PUSHOVER_USER_KEY || '',
   pushoverAppToken: process.env.PUSHOVER_APP_TOKEN || '',
   pollIntervalMinutes: parseInt(process.env.POLL_INTERVAL_MINUTES || '15', 10),

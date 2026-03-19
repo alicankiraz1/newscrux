@@ -27,8 +27,8 @@ import type { PollMetrics } from './types.js';
 const log = createLogger('main');
 
 function validateConfig(): void {
-  if (!config.openrouterApiKey) {
-    log.error('OPENROUTER_API_KEY is required. Set it in .env file.');
+  if (!config.llmApiKey) {
+    log.error('LLM_API_KEY (or OPENROUTER_API_KEY) is required. Set it in .env file.');
     process.exit(1);
   }
   if (!config.pushoverUserKey || !config.pushoverAppToken) {
