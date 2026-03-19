@@ -127,5 +127,8 @@ export async function sendArticleNotification(
 ): Promise<{ success: boolean; truncated: boolean }> {
   const { title, message, truncated } = renderNotification(entry, summary);
   const success = await sendNotification(title, message);
+  if (success) {
+    log.info(`Telegram sent: ${entry.title}`);
+  }
   return { success, truncated };
 }

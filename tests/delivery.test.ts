@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { sendImmediatelyIfRegular } from '../src/delivery.js';
+import { processSummarizedEntry, sendImmediatelyIfRegular } from '../src/delivery.js';
 import type { QueueEntry, StructuredSummary } from '../src/types.js';
 
 function createEntry(feedName: string): QueueEntry {
@@ -58,4 +58,36 @@ test('sendImmediatelyIfRegular skips arxiv summaries for later digest delivery',
 
   assert.equal(called, 0);
   assert.deepEqual(result, { attempted: false, success: false, truncated: false });
+});
+
+test('processSummarizedEntry saves progress immediately after a successful regular send', async () => {
+  const actions: string[] = [];
+  const entry = createEntry('TechCrunch AI');
+
+  await processSummarizedEntry({
+    entry,
+    summary,
+    arxivFeedPrefix: 'arXiv ',
+    sendArticleNotification: async () => ({ success: true, truncated: true }),
+    transitionEntry: (_id, state) => {
+      actions.push(`transition:${state}`);
+    },
+    markFailed: () => {
+      actions.push('failed');
+    },
+    saveArticleQueue: () => {
+      actions.push('save');
+    },
+    onSummarized: () => {
+      actions.push('summarized');
+    },
+    onSent: truncated => {
+      actions.push(`sent:${truncated}`);
+    },
+    onSendFailed: () => {
+      actions.push('send_failed');
+    },
+  });
+
+  assert.deepEqual(actions, ['transition:sent', 'save', 'summarized', 'sent:true']);
 });

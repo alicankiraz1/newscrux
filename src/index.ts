@@ -20,7 +20,7 @@ import {
   countByState,
 } from './queue.js';
 import { sendNotification, sendArticleNotification, escapeHtml } from './telegram.js';
-import { sendImmediatelyIfRegular } from './delivery.js';
+import { processSummarizedEntry } from './delivery.js';
 import { parseArgs } from './cli.js';
 import { getLanguagePack } from './i18n.js';
 import type { PollMetrics } from './types.js';
@@ -149,36 +149,32 @@ async function pollAndNotify(): Promise<void> {
     for (const entry of toSummarize) {
       const summary = await summarizeEntry(entry);
       if (summary) {
-        const immediateDelivery = await sendImmediatelyIfRegular(
+        await processSummarizedEntry({
           entry,
           summary,
+          arxivFeedPrefix: config.arxivFeedPrefix,
           sendArticleNotification,
-          config.arxivFeedPrefix,
-        );
-
-        if (immediateDelivery.attempted) {
-          if (immediateDelivery.success) {
-            transitionEntry(entry.id, 'sent', { structuredSummary: summary });
+          transitionEntry,
+          markFailed,
+          saveArticleQueue,
+          onSummarized: () => {
             metrics.summarized++;
+          },
+          onSent: truncated => {
             metrics.sent++;
-            if (immediateDelivery.truncated) metrics.truncated++;
-          } else {
-            transitionEntry(entry.id, 'summarized', { structuredSummary: summary });
-            markFailed(entry.id, 'Telegram send failed');
-            metrics.summarized++;
+            if (truncated) metrics.truncated++;
+          },
+          onSendFailed: () => {
             metrics.send_failed++;
-          }
-        } else {
-          transitionEntry(entry.id, 'summarized', { structuredSummary: summary });
-          metrics.summarized++;
-        }
+          },
+        });
       } else {
         markFailed(entry.id, 'Summarization failed');
+        saveArticleQueue();
         metrics.summary_failed++;
       }
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    saveArticleQueue();
 
     // --- Send: split regular (immediate) vs arXiv (hourly digest) ---
     const toSend = getEntriesByState('summarized');
@@ -196,10 +192,12 @@ async function pollAndNotify(): Promise<void> {
       const { success, truncated } = await sendArticleNotification(entry, entry.structuredSummary);
       if (success) {
         transitionEntry(entry.id, 'sent');
+        saveArticleQueue();
         metrics.sent++;
         if (truncated) metrics.truncated++;
       } else {
         markFailed(entry.id, 'Telegram send failed');
+        saveArticleQueue();
         metrics.send_failed++;
       }
 
