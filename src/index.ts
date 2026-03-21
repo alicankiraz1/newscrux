@@ -1,6 +1,6 @@
 #!/usr/bin/env node
 // src/index.ts
-import { config, runtimeConfig } from './config.js';
+import { config, getMissingConfigKeys, runtimeConfig } from './config.js';
 import { createLogger } from './logger.js';
 import { fetchAllArticles } from './feeds.js';
 import { filterByRelevance } from './relevance.js';
@@ -17,9 +17,12 @@ import {
   transitionEntry,
   markFailed,
   removeEntry,
+  removeStalePendingEntries,
   countByState,
 } from './queue.js';
-import { sendNotification, sendArticleNotification, escapeHtml } from './pushover.js';
+import { sendNotification, sendArticleNotification, escapeHtml } from './telegram.js';
+import { processSummarizedEntry } from './delivery.js';
+import { selectDiscoveredBatch } from './pipeline.js';
 import { parseArgs } from './cli.js';
 import { getLanguagePack } from './i18n.js';
 import type { PollMetrics } from './types.js';
@@ -27,12 +30,9 @@ import type { PollMetrics } from './types.js';
 const log = createLogger('main');
 
 function validateConfig(): void {
-  if (!config.openrouterApiKey) {
-    log.error('OPENROUTER_API_KEY is required. Set it in .env file.');
-    process.exit(1);
-  }
-  if (!config.pushoverUserKey || !config.pushoverAppToken) {
-    log.error('PUSHOVER_USER_KEY and PUSHOVER_APP_TOKEN are required. Set them in .env file.');
+  const missingKeys = getMissingConfigKeys();
+  if (missingKeys.length > 0) {
+    log.error(`${missingKeys.join(', ')} ${missingKeys.length === 1 ? 'is' : 'are'} required. Set ${missingKeys.length === 1 ? 'it' : 'them'} in .env file.`);
     process.exit(1);
   }
 }
@@ -70,7 +70,31 @@ async function pollAndNotify(): Promise<void> {
   };
 
   try {
-    loadArticleQueue();
+    const queue = loadArticleQueue();
+
+    const stalePendingRemoved = removeStalePendingEntries(queue, config.freshnessWindowHours);
+    if (stalePendingRemoved > 0) {
+      saveArticleQueue();
+      log.info(`Removed ${stalePendingRemoved} stale pending entr${stalePendingRemoved === 1 ? 'y' : 'ies'} outside the ${config.freshnessWindowHours}h freshness window`);
+    }
+
+    if (!config.enableArxiv) {
+      const pendingArxiv = getQueue()
+        ? Object.values(getQueue().entries).filter(entry =>
+          entry.feedName.startsWith(config.arxivFeedPrefix) &&
+          entry.state !== 'sent'
+        )
+        : [];
+
+      for (const entry of pendingArxiv) {
+        removeEntry(entry.id);
+      }
+
+      if (pendingArxiv.length > 0) {
+        saveArticleQueue();
+        log.info(`Removed ${pendingArxiv.length} pending arXiv entries because ENABLE_ARXIV=false`);
+      }
+    }
 
     const allArticles = await fetchAllArticles();
 
@@ -94,7 +118,11 @@ async function pollAndNotify(): Promise<void> {
     // Limit discovered batch to prevent overwhelming the relevance model
     const MAX_RELEVANCE_BATCH = 25;
     const allDiscovered = getEntriesByState('discovered');
-    const discovered = allDiscovered.slice(0, MAX_RELEVANCE_BATCH);
+    const discovered = selectDiscoveredBatch(allDiscovered, {
+      maxBatchSize: MAX_RELEVANCE_BATCH,
+      arxivFeedPrefix: config.arxivFeedPrefix,
+      enableArxiv: config.enableArxiv,
+    });
 
     if (allDiscovered.length > MAX_RELEVANCE_BATCH) {
       log.info(`Processing ${discovered.length}/${allDiscovered.length} discovered articles this cycle`);
@@ -127,7 +155,9 @@ async function pollAndNotify(): Promise<void> {
     const isArxiv = (name: string) => name.startsWith(config.arxivFeedPrefix);
     const eligibleForEnrich = getEntriesByState('discovered').filter(e => relevancePassedIds.has(e.id));
     const regularToEnrich = eligibleForEnrich.filter(e => !isArxiv(e.feedName));
-    const arxivToEnrich = eligibleForEnrich.filter(e => isArxiv(e.feedName));
+    const arxivToEnrich = config.enableArxiv
+      ? eligibleForEnrich.filter(e => isArxiv(e.feedName))
+      : [];
 
     const enrichBatch = [
       ...regularToEnrich.slice(0, config.maxArticlesPerPoll),
@@ -151,15 +181,32 @@ async function pollAndNotify(): Promise<void> {
     for (const entry of toSummarize) {
       const summary = await summarizeEntry(entry);
       if (summary) {
-        transitionEntry(entry.id, 'summarized', { structuredSummary: summary });
-        metrics.summarized++;
+        await processSummarizedEntry({
+          entry,
+          summary,
+          arxivFeedPrefix: config.arxivFeedPrefix,
+          sendArticleNotification,
+          transitionEntry,
+          markFailed,
+          saveArticleQueue,
+          onSummarized: () => {
+            metrics.summarized++;
+          },
+          onSent: truncated => {
+            metrics.sent++;
+            if (truncated) metrics.truncated++;
+          },
+          onSendFailed: () => {
+            metrics.send_failed++;
+          },
+        });
       } else {
         markFailed(entry.id, 'Summarization failed');
+        saveArticleQueue();
         metrics.summary_failed++;
       }
       await new Promise(resolve => setTimeout(resolve, 2000));
     }
-    saveArticleQueue();
 
     // --- Send: split regular (immediate) vs arXiv (hourly digest) ---
     const toSend = getEntriesByState('summarized');
@@ -177,10 +224,12 @@ async function pollAndNotify(): Promise<void> {
       const { success, truncated } = await sendArticleNotification(entry, entry.structuredSummary);
       if (success) {
         transitionEntry(entry.id, 'sent');
+        saveArticleQueue();
         metrics.sent++;
         if (truncated) metrics.truncated++;
       } else {
-        markFailed(entry.id, 'Pushover send failed');
+        markFailed(entry.id, 'Telegram send failed');
+        saveArticleQueue();
         metrics.send_failed++;
       }
 
@@ -189,7 +238,9 @@ async function pollAndNotify(): Promise<void> {
 
     // Send arXiv as hourly digest
     const now = Date.now();
-    const arxivReady = arxivToSend.filter(e => e.structuredSummary);
+    const arxivReady = config.enableArxiv
+      ? arxivToSend.filter(e => e.structuredSummary)
+      : [];
     if (arxivReady.length > 0 && (now - lastArxivDigestTime) >= ARXIV_DIGEST_INTERVAL_MS) {
       const { labels } = getLanguagePack(runtimeConfig.language);
 
@@ -201,12 +252,12 @@ async function pollAndNotify(): Promise<void> {
         digestParts.push(`<b>${escapeHtml(title)}</b>\n${escapeHtml(s.what_happened)}`);
       }
 
-      // Pushover 1024 char limit — fit as many papers as possible
+      // Keep digest compact enough for Telegram readability
       let digestMessage = '';
       let includedCount = 0;
       for (const part of digestParts) {
         const candidate = digestMessage ? digestMessage + '\n\n' + part : part;
-        if (candidate.length > 1000) break; // leave room for header
+        if (candidate.length > 3500) break;
         digestMessage = candidate;
         includedCount++;
       }
@@ -283,7 +334,7 @@ async function main(): Promise<void> {
   if (startupSent) {
     log.info('Startup notification sent');
   } else {
-    log.error('Failed to send startup notification — check Pushover credentials');
+    log.error('Failed to send startup notification — check Telegram credentials');
   }
 
   await pollAndNotify();

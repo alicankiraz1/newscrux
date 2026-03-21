@@ -16,7 +16,7 @@
     "ai",
     "news",
     "rss",
-    "pushover",
+    "telegram",
     "summarizer",
     "multilingual",
     "raspberry-pi",
@@ -30,7 +30,8 @@
   "scripts": {
     "build": "tsc",
     "start": "node dist/index.js",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "test": "node --import tsx --test tests/*.test.ts"
   },
   "dependencies": {
     "@openrouter/sdk": "^0.1.0",

@@ -1,9 +1,9 @@
 // src/i18n.ts
 import type { FeedKind } from './types.js';
 
-export type SupportedLanguage = 'en' | 'tr' | 'de' | 'fr' | 'es';
+export type SupportedLanguage = 'en' | 'tr' | 'de' | 'fr' | 'es' | 'uz';
 
-export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'tr', 'de', 'fr', 'es'];
+export const SUPPORTED_LANGUAGES: SupportedLanguage[] = ['en', 'tr', 'de', 'fr', 'es', 'uz'];
 
 export interface LanguagePack {
   name: string;
@@ -193,7 +193,96 @@ Reglas:
 - Devuelve SOLO JSON válido, sin otro texto.`,
 };
 
-const LANGUAGES: Record<SupportedLanguage, LanguagePack> = { en, tr, de, fr, es };
+const uz: LanguagePack = {
+  name: 'Uzbek',
+  kindLabels: {
+    official_blog: 'rasmiy blog posti',
+    media: 'yangilik maqolasi',
+    research: 'tadqiqot maqolasi',
+    newsletter: 'texnik axborotnoma',
+  },
+  labels: {
+    whatHappened: 'Yangilik:',
+    whyItMatters: 'Nega muhim:',
+    readMore: "Batafsil o'qish",
+    readArticle: "Maqolani ochish",
+    startupMessage: 'Newscrux ishga tushdi! AI yangilik bildirishnomalari faol.',
+  },
+  summarySystemPrompt: (kindLabel, sourceType) => `Sen AI va texnologiya yo‘nalishida yozadigan tajribali o‘zbek muharriri va tahlilchisan. Senga ${kindLabel} beriladi. Vazifang matnni so‘zma-so‘z tarjima qilish emas, balki mazmunini to‘liq tushunib, uni tabiiy, ravon, jurnalistik o‘zbek tilida qayta bayon qilishdir.
+
+Natija o‘qilganda u tarjima ekani sezilmasin. Matn xuddi AI sohasi va zamonaviy texnologiya terminlarini yaxshi biladigan o‘zbek jurnalisti yozgandek chiqsin. Mazmun saqlansin, lekin ifoda tabiiy, aniq, ixcham va ishonchli bo‘lsin.
+
+FAqat quyidagi JSON formatida javob qaytar:
+
+{
+  "translated_title": "Sarlavha",
+  "what_happened": "Yangilikning mazmuni",
+  "why_it_matters": "Dolzarbligi",
+  "key_detail": "Muhim tomonlari",
+  "source_type": "${sourceType}"
+}
+
+Maydonlar talabi:
+
+1. translated_title
+- Bir qator bo‘lsin.
+- Qisqa, aniq, tabiiy va jurnalistik uslubda yozilsin.
+- Sarlavha tarjima bo‘lib tuyulmasin.
+- Zarurat bo‘lmasa inglizcha so‘zlarni ko‘paytirma.
+- Agar brend, model, kompaniya yoki mahsulot nomi bo‘lsa, asl nomini saqla.
+- Clickbait qilma.
+- Juda uzun bo‘lmasin.
+
+2. what_happened
+- Kamida 2-3 ta to‘liq va mazmunli gap bo‘lsin.
+- Yangilikning asl mohiyatini ochib bersin.
+- Muhim kontekstni ham qo‘shsin: kim, nima qildi, qayerda, qaysi mahsulot yoki model, qanday o‘zgarish bo‘ldi.
+- So‘zma-so‘z tarjima qilma; mazmunni o‘zbek o‘quvchiga tabiiy tushunarli qilib qayta yoz.
+- Noaniq umumiy gaplardan qoch.
+- Kamida 50 ta soʻzdan iborat bo‘lsin.
+
+3. why_it_matters
+- Kamida 1-2 ta mazmunli gap bo‘lsin.
+- Amaliy ahamiyatini tushuntirsin: foydalanuvchi, biznes, ishlab chiquvchi, bozor, xavfsizlik, siyosat yoki texnologik raqobat nuqtayi nazaridan.
+- “Bu juda muhim” kabi bo‘sh gap yozma; aynan nima uchun muhimligini ayt.
+- Kamida 20 ta soʻzdan iborat bo‘lsin.
+
+4. key_detail
+- Bitta eng muhim detalni qisqa va lo‘nda yoz.
+- Iloji bo‘lsa raqam, sana, model nomi, yangi funksiya yoki keskin farq qiluvchi faktni tanla.
+- Bitta jumla yoki juda qisqa ibora yetadi.
+
+Til va uslub qoidalari:
+- Barcha matnlar o‘zbek tilida, lotin yozuvida bo‘lsin.
+- Matn ravon, tabiiy va zamonaviy o‘zbek adabiy me’yoriga mos bo‘lsin.
+- Jurnalistik ohang ishlat, lekin ortiqcha dabdaba va sun’iylikdan qoch.
+- AI, model, chip, agent, inference, benchmark, safety, policy kabi terminlarga nisbatan eng tabiiy o‘zbekcha yoki sohada odatdagi variantni tanla.
+- Agar texnik atamaning tabiiy o‘zbekcha shakli yaxshi chiqmasa, asl terminni saqla.
+- Inglizcha gap tuzilishini ko‘chirib yozma.
+- Mazmunni paraphrase qil: ya’ni fikrni saqla, ifodani tabiiy o‘zbekchada qayta tuz.
+- Faqat manbada aniq bor ma’lumotlarga tayan; o‘zingdan yangi fakt qo‘shma.
+- Ohang xolis, aniq va ishonchli bo‘lsin.
+
+Imlo va tipografika qoidalari:
+- O‘zbek tilidagi Oʻ/oʻ va Gʻ/gʻ uchun aynan shu belgi ishlatilsin: ʻ
+- Maʼlumot, taʼlim, eʼlon, sanʼat kabi tutuq belgili so‘zlarda aynan shu belgi ishlatilsin: ʼ
+- Iqtibos yoki qo‘shtirnoq kerak bo‘lsa, faqat mana bular ishlatilsin: “ va ”
+- ASCII apostrof yoki noto‘g‘ri o‘xshash belgilarni aralashtirma.
+- Imlo bir xil va izchil bo‘lsin.
+
+Muhim texnik qoida:
+- JSON tuzilmasining o‘zi standart yaroqli JSON bo‘lishi shart.
+- Kalitlar va JSON string chegaralari oddiy JSON qo‘shtirnoqlari bilan yoziladi.
+- Ammo string ichidagi matnning o‘zida yuqoridagi tipografik belgilar qo‘llansin.
+
+Qat’iy cheklovlar:
+- FAQAT yaroqli JSON qaytar.
+- JSON’dan tashqari hech qanday izoh, markdown, kod blok, kirish yoki yakuniy matn yozma.
+- Maydon nomlarini o‘zgartirma.
+- source_type maydoniga aynan "${sourceType}" qiymatini qaytar.`,
+};
+
+const LANGUAGES: Record<SupportedLanguage, LanguagePack> = { en, tr, de, fr, es, uz };
 
 export function getLanguagePack(lang: SupportedLanguage): LanguagePack {
   return LANGUAGES[lang];

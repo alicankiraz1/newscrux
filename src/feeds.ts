@@ -1,8 +1,8 @@
-// src/feeds.ts
 import Parser from 'rss-parser';
-import { config } from './config.js';
+import { config, getEnabledFeeds } from './config.js';
 import { createLogger } from './logger.js';
 import { deduplicateArticles } from './dedup.js';
+import { filterFreshArticles, isValidPublishedAt } from './freshness.js';
 import type { Article, FeedConfig } from './types.js';
 
 const log = createLogger('feeds');
@@ -39,7 +39,7 @@ async function fetchFeed(feed: FeedConfig): Promise<Article[]> {
 
 export async function fetchAllArticles(): Promise<Article[]> {
   const results = await Promise.allSettled(
-    config.feeds.map(feed => fetchFeed(feed))
+    getEnabledFeeds().map(feed => fetchFeed(feed))
   );
 
   const allArticles: Article[] = [];
@@ -54,6 +54,17 @@ export async function fetchAllArticles(): Promise<Article[]> {
     new Date(b.publishedAt).getTime() - new Date(a.publishedAt).getTime()
   );
 
-  log.info(`Fetched ${allArticles.length} total articles, ${unique.length} after dedup`);
-  return unique;
+  const invalidCount = unique.filter(article => !isValidPublishedAt(article.publishedAt)).length;
+  if (invalidCount > 0) {
+    log.warn(`Skipping ${invalidCount} article(s) with invalid publishedAt values`);
+  }
+
+  const fresh = filterFreshArticles(unique, config.freshnessWindowHours);
+  const staleCount = unique.length - fresh.length;
+  if (staleCount > 0) {
+    log.info(`Skipped ${staleCount} stale article(s) outside the ${config.freshnessWindowHours}h freshness window`);
+  }
+
+  log.info(`Fetched ${allArticles.length} total articles, ${unique.length} after dedup, ${fresh.length} within freshness window`);
+  return fresh;
 }

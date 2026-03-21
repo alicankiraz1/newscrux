@@ -24,7 +24,8 @@ To add a new language to the notification system:
 1. Add a new `LanguagePack` entry in `src/i18n.ts`
 2. Add the language code to the `SupportedLanguage` type
 3. Add it to the `SUPPORTED_LANGUAGES` array
-4. Test with `npm run dev -- --lang=<your-code>`
+4. Add or update automated tests for the new language
+5. Test with `npm run dev -- --lang=<your-code>`
 
 ## Reporting Issues
 

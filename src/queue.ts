@@ -3,6 +3,7 @@ import { readFileSync, writeFileSync, renameSync, mkdirSync, existsSync } from '
 import { join } from 'node:path';
 import { config } from './config.js';
 import { createLogger } from './logger.js';
+import { isStalePendingEntry } from './freshness.js';
 import type { Article, ArticleQueue, QueueEntry, ArticleState, SeenArticlesStore } from './types.js';
 
 const log = createLogger('queue');
@@ -57,6 +58,7 @@ function migrateFromSeen(): ArticleQueue {
         title: '',
         link: '',
         snippet: '',
+        publishedAt: '',
         discoveredAt: timestamp,
         lastUpdatedAt: now,
       };
@@ -136,6 +138,7 @@ export function discoverArticles(articles: Article[]): number {
       title: article.title,
       link: article.link,
       snippet: article.snippet,
+      publishedAt: article.publishedAt,
       discoveredAt: now,
       lastUpdatedAt: now,
     };
@@ -162,6 +165,7 @@ export function handleColdStart(articles: Article[]): boolean {
       title: article.title,
       link: article.link,
       snippet: article.snippet,
+      publishedAt: article.publishedAt,
       discoveredAt: now,
       lastUpdatedAt: now,
     };
@@ -215,6 +219,25 @@ export function markFailed(id: string, error: string): void {
 
 export function removeEntry(id: string): void {
   delete getQueue().entries[id];
+}
+
+export function removeStalePendingEntries(
+  queue: ArticleQueue,
+  freshnessWindowHours: number,
+  now = Date.now(),
+): number {
+  let removed = 0;
+
+  for (const [id, entry] of Object.entries(queue.entries)) {
+    if (!isStalePendingEntry(entry, freshnessWindowHours, now)) {
+      continue;
+    }
+
+    delete queue.entries[id];
+    removed++;
+  }
+
+  return removed;
 }
 
 export function countByState(): Record<ArticleState, number> {
