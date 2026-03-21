@@ -17,10 +17,12 @@ import {
   transitionEntry,
   markFailed,
   removeEntry,
+  removeStalePendingEntries,
   countByState,
 } from './queue.js';
 import { sendNotification, sendArticleNotification, escapeHtml } from './telegram.js';
 import { processSummarizedEntry } from './delivery.js';
+import { selectDiscoveredBatch } from './pipeline.js';
 import { parseArgs } from './cli.js';
 import { getLanguagePack } from './i18n.js';
 import type { PollMetrics } from './types.js';
@@ -68,7 +70,31 @@ async function pollAndNotify(): Promise<void> {
   };
 
   try {
-    loadArticleQueue();
+    const queue = loadArticleQueue();
+
+    const stalePendingRemoved = removeStalePendingEntries(queue, config.freshnessWindowHours);
+    if (stalePendingRemoved > 0) {
+      saveArticleQueue();
+      log.info(`Removed ${stalePendingRemoved} stale pending entr${stalePendingRemoved === 1 ? 'y' : 'ies'} outside the ${config.freshnessWindowHours}h freshness window`);
+    }
+
+    if (!config.enableArxiv) {
+      const pendingArxiv = getQueue()
+        ? Object.values(getQueue().entries).filter(entry =>
+          entry.feedName.startsWith(config.arxivFeedPrefix) &&
+          entry.state !== 'sent'
+        )
+        : [];
+
+      for (const entry of pendingArxiv) {
+        removeEntry(entry.id);
+      }
+
+      if (pendingArxiv.length > 0) {
+        saveArticleQueue();
+        log.info(`Removed ${pendingArxiv.length} pending arXiv entries because ENABLE_ARXIV=false`);
+      }
+    }
 
     const allArticles = await fetchAllArticles();
 
@@ -92,7 +118,11 @@ async function pollAndNotify(): Promise<void> {
     // Limit discovered batch to prevent overwhelming the relevance model
     const MAX_RELEVANCE_BATCH = 25;
     const allDiscovered = getEntriesByState('discovered');
-    const discovered = allDiscovered.slice(0, MAX_RELEVANCE_BATCH);
+    const discovered = selectDiscoveredBatch(allDiscovered, {
+      maxBatchSize: MAX_RELEVANCE_BATCH,
+      arxivFeedPrefix: config.arxivFeedPrefix,
+      enableArxiv: config.enableArxiv,
+    });
 
     if (allDiscovered.length > MAX_RELEVANCE_BATCH) {
       log.info(`Processing ${discovered.length}/${allDiscovered.length} discovered articles this cycle`);
@@ -125,7 +155,9 @@ async function pollAndNotify(): Promise<void> {
     const isArxiv = (name: string) => name.startsWith(config.arxivFeedPrefix);
     const eligibleForEnrich = getEntriesByState('discovered').filter(e => relevancePassedIds.has(e.id));
     const regularToEnrich = eligibleForEnrich.filter(e => !isArxiv(e.feedName));
-    const arxivToEnrich = eligibleForEnrich.filter(e => isArxiv(e.feedName));
+    const arxivToEnrich = config.enableArxiv
+      ? eligibleForEnrich.filter(e => isArxiv(e.feedName))
+      : [];
 
     const enrichBatch = [
       ...regularToEnrich.slice(0, config.maxArticlesPerPoll),
@@ -206,7 +238,9 @@ async function pollAndNotify(): Promise<void> {
 
     // Send arXiv as hourly digest
     const now = Date.now();
-    const arxivReady = arxivToSend.filter(e => e.structuredSummary);
+    const arxivReady = config.enableArxiv
+      ? arxivToSend.filter(e => e.structuredSummary)
+      : [];
     if (arxivReady.length > 0 && (now - lastArxivDigestTime) >= ARXIV_DIGEST_INTERVAL_MS) {
       const { labels } = getLanguagePack(runtimeConfig.language);
 

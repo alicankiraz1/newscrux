@@ -16,6 +16,7 @@ test('renderNotification includes Uzbek labels and article link for Telegram', (
     title: 'Original title',
     link: 'https://example.com/article',
     snippet: 'snippet',
+    publishedAt: '2026-03-20T00:00:00.000Z',
     discoveredAt: 0,
     lastUpdatedAt: 0,
   };

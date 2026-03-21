@@ -13,6 +13,7 @@ function createEntry(feedName: string): QueueEntry {
     title: 'Title',
     link: 'https://example.com/article',
     snippet: 'snippet',
+    publishedAt: '2026-03-20T00:00:00.000Z',
     discoveredAt: 0,
     lastUpdatedAt: 0,
   };

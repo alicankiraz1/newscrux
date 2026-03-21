@@ -1,5 +1,10 @@
 # Newscrux AI News Push Notification Service
-# Edit --lang= flag and paths to match your setup
+# Edit User=, WorkingDirectory=, EnvironmentFile=, and --lang= to match your setup.
+# Example Ubuntu setup:
+#   User=ubuntu
+#   WorkingDirectory=/home/ubuntu/newscrux
+#   EnvironmentFile=/home/ubuntu/newscrux/.env
+#   ExecStart=/usr/bin/node /home/ubuntu/newscrux/dist/index.js --lang=uz
 
 [Unit]
 Description=Newscrux AI News Push Notification Service
@@ -8,14 +13,15 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-WorkingDirectory=%h/newscrux
-ExecStart=/usr/bin/node %h/newscrux/dist/index.js --lang=en
+User=ubuntu
+WorkingDirectory=/home/ubuntu/newscrux
+ExecStart=/usr/bin/node /home/ubuntu/newscrux/dist/index.js --lang=en
 Restart=on-failure
 RestartSec=30
 StartLimitIntervalSec=300
 StartLimitBurst=5
 
-EnvironmentFile=%h/newscrux/.env
+EnvironmentFile=/home/ubuntu/newscrux/.env
 
 StandardOutput=journal
 StandardError=journal
@@ -23,7 +29,7 @@ SyslogIdentifier=newscrux
 
 NoNewPrivileges=true
 ProtectSystem=strict
-ReadWritePaths=%h/newscrux/data
+ReadWritePaths=/home/ubuntu/newscrux/data
 
 [Install]
 WantedBy=multi-user.target

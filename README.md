@@ -16,6 +16,8 @@ Newscrux monitors 13 AI/ML RSS feeds, filters articles by relevance using AI, ex
 
 Every notification tells you **what happened**, **why it matters**, and **one key detail** — in English, Turkish, German, French, Spanish, or Uzbek.
 
+By default, Newscrux only processes articles published within the last 24 hours, so stale backlog items are skipped automatically.
+
 ---
 
 ## Custom Updates In This Fork
@@ -26,6 +28,8 @@ This fork adds several workflow changes on top of the upstream project:
 - Telegram bot delivery instead of Pushover
 - Immediate delivery for regular news after summarization, so notifications no longer wait for the whole batch to finish
 - OpenRouter model selection through `.env`, including Gemini models via BYOK
+- Optional `ENABLE_ARXIV=false` mode when you want only top AI news notifications without research paper digests
+- Recent-news-only processing with a configurable 24-hour freshness window
 
 Recommended fork setup:
 
@@ -187,11 +191,15 @@ newscrux                # Start with English summaries (default)
 | Variable | Required | Default | Description |
 |----------|----------|---------|-------------|
 | `OPENROUTER_API_KEY` | Yes | — | OpenRouter API key |
+| `GEMINI_API_KEY` | No | — | Direct Gemini fallback API key |
 | `TELEGRAM_BOT_TOKEN` | Yes | — | Telegram bot token from `@BotFather` |
 | `TELEGRAM_CHAT_ID` | Yes | — | Telegram destination chat ID |
 | `OPENROUTER_MODEL` | No | `deepseek/deepseek-v3.2-speciale` | AI model for summarization |
+| `GEMINI_MODEL` | No | `gemini-3-flash-preview` | Direct Gemini fallback model |
 | `POLL_INTERVAL_MINUTES` | No | `15` | Minutes between feed polls |
+| `FRESHNESS_WINDOW_HOURS` | No | `24` | Only process articles published within this rolling time window |
 | `MAX_ARTICLES_PER_POLL` | No | `10` | Max regular articles processed per cycle |
+| `ENABLE_ARXIV` | No | `true` | Set to `false` to disable arXiv fetch/summarization/delivery |
 | `ARXIV_MAX_PER_POLL` | No | `15` | Max arXiv papers processed per cycle |
 | `RELEVANCE_THRESHOLD` | No | `6` | Minimum AI relevance score (1–10) |
 | `LOG_LEVEL` | No | `info` | Log verbosity: `debug`, `info`, `warn`, `error` |
@@ -222,31 +230,80 @@ To add or remove feeds, edit the `feeds` array in `src/config.ts`.
 
 ## Deployment
 
-### Raspberry Pi / Linux server (systemd)
+### Ubuntu Server (systemd)
+
+Use this when you want Newscrux to keep running after logout or reboot on an Ubuntu VPS, VM, or home server.
 
 ```bash
-# 1. Clone and build
+# 1. Install Node.js 20 and git
+sudo apt update
+sudo apt install -y curl git
+curl -fsSL https://deb.nodesource.com/setup_20.x | sudo -E bash -
+sudo apt install -y nodejs
+
+# 2. Clone your fork
 git clone https://github.com/devtulkin/newscrux.git ~/newscrux
 cd ~/newscrux
+
+# 3. Install dependencies and build
 npm install
 cp .env.example .env
-nano .env                                       # fill in your API keys
+nano .env
 npm run build
 
-# 2. Install and configure service
-cp newscrux.service ~/.config/systemd/user/
-nano ~/.config/systemd/user/newscrux.service    # adjust --lang flag if needed
-
-# 3. Enable and start (user-level systemd)
-systemctl --user daemon-reload
-systemctl --user enable newscrux
-systemctl --user start newscrux
-
-# 4. View live logs
-journalctl --user -u newscrux -f
+# 4. Install the systemd service
+sudo cp newscrux.service /etc/systemd/system/newscrux.service
+sudo nano /etc/systemd/system/newscrux.service
 ```
 
-**Note:** The service file uses `%h` (systemd home directory specifier) so paths are automatically resolved to your home directory. No root access needed.
+Before starting the service, update these lines inside `newscrux.service` to match your server user and installation path:
+
+```ini
+User=ubuntu
+WorkingDirectory=/home/ubuntu/newscrux
+EnvironmentFile=/home/ubuntu/newscrux/.env
+ExecStart=/usr/bin/node /home/ubuntu/newscrux/dist/index.js --lang=uz
+```
+
+Then enable and start it:
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable newscrux
+sudo systemctl start newscrux
+```
+
+Useful commands:
+
+```bash
+# View current status
+sudo systemctl status newscrux
+
+# Follow logs live
+sudo journalctl -u newscrux -f
+
+# Restart after .env or code changes
+sudo systemctl restart newscrux
+
+# Stop the service
+sudo systemctl stop newscrux
+```
+
+To update the server later:
+
+```bash
+cd ~/newscrux
+git pull
+npm install
+npm run build
+sudo systemctl restart newscrux
+```
+
+### Notes
+
+- The included `newscrux.service` file is a template; update the username and absolute paths before enabling it.
+- Make sure `TELEGRAM_BOT_TOKEN`, `TELEGRAM_CHAT_ID`, and at least one LLM key are present in `.env`.
+- If you want only recent AI news without research-paper backlog, keep `ENABLE_ARXIV=false` and `FRESHNESS_WINDOW_HOURS=24` in `.env`.
 
 ---
 

@@ -51,6 +51,7 @@ export interface QueueEntry {
   title: string;
   link: string;
   snippet: string;
+  publishedAt: string;
   enrichedContent?: string;
   structuredSummary?: StructuredSummary;
   discoveredAt: number;
