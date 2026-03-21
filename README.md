@@ -86,8 +86,7 @@ npm start -- --lang=en      # or: tr, de, fr, es
 **Prerequisites:**
 - [Node.js 18+](https://nodejs.org)
 - [OpenRouter API key](https://openrouter.ai/keys) (free tier available)
-- [Pushover account](https://pushover.net) (one-time $5 app fee)
-
+- [Pushover account](https://pushover.net) (one-time $5 app fee) — *optional, not required for Windows*
 ---
 
 ## Architecture
@@ -200,6 +199,25 @@ To add or remove feeds, edit the `feeds` array in `src/config.ts`.
 ---
 
 ## Deployment
+
+### Windows (pm2)
+```powershell
+# 1. Clone and build
+git clone https://github.com/alicankiraz1/newscrux.git
+cd newscrux
+npm install
+copy .env.example .env
+npm run build
+
+# 2. Install pm2 globally and start
+npm install -g pm2
+pm2 start dist/index.js --name newscrux -- --lang=en
+pm2 save && pm2 startup
+```
+
+**Note:** Run the command printed by `pm2 startup` to enable auto-start on Windows login.
+
+---
 
 ### Raspberry Pi / Linux server (systemd)
 
